@@ -9,6 +9,7 @@
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <style>
   :root{
@@ -316,7 +317,7 @@
         <summary>🤖 AI 정확 인식 설정 — 사진을 정확히 읽으려면 (권장 · 무료)</summary>
         <div class="acc-body">
           <p id="aiIntro"><b>무료 AI 키</b>를 한 번만 등록하면, 사진을 붙여넣을 때 <b>AI가 메뉴를 정확히</b> 읽어줍니다.
-          키는 <b>이 브라우저에만 저장</b>되고(공개 소스엔 안 들어감), 한 번 등록하면 이 칸은 사라집니다.</p>
+          키는 <b>로그인 계정에 안전하게 저장</b>돼서, <b>같은 계정으로 로그인한 모든 기기(다른 컴퓨터·폰)에서 자동으로</b> 쓰입니다. (공개 소스엔 안 들어가고, 본인만 읽어요. 등록하면 이 칸은 사라집니다.)</p>
           <div id="aiSetup">
             <ol class="acc-steps">
               <li><a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">aistudio.google.com/apikey</a> 접속 → 구글 로그인 → <b>Create API key</b> → 키 복사</li>
@@ -786,14 +787,23 @@ function refreshAiStatus(){
   }
   const hint=$('#aiHint'); if(hint) hint.style.display=k?'inline':'none';
 }
-$('#btnSaveKey').onclick=()=>{
+$('#btnSaveKey').onclick=async()=>{
   const v=($('#aiKey').value||'').trim();
   if(!v){toast('키를 먼저 붙여넣어 주세요');return;}
   if(v.length<20){toast('키가 너무 짧아요 — 올바른 키인지 확인해 주세요');return;}
-  localStorage.setItem(LS_AIKEY,v); refreshAiStatus(); toast('AI 키를 저장했어요 — 이제 사진을 붙여넣어 보세요 ✅');
+  localStorage.setItem(LS_AIKEY,v); refreshAiStatus();
+  // 계정(Firestore)에도 저장 → 같은 계정으로 로그인한 모든 기기에 자동 적용
+  if(window.__cloudKey){
+    try{ const ok=await window.__cloudKey.save(v); toast(ok?'AI 키 저장 완료 ✅ 모든 기기에서 자동으로 쓰여요':'이 기기에 저장했어요 (계정 동기화는 로그인 후 가능)'); }
+    catch(e){ console.warn(e); toast('이 기기엔 저장됐는데 계정 동기화 실패: '+(e&&e.message||e)); }
+  } else { toast('AI 키를 저장했어요 ✅'); }
 };
 $('#btnChangeKey').onclick=()=>{ const s=$('#aiSetup'); if(s){s.style.display='block';} const k=$('#aiKey'); if(k)k.focus(); };
-$('#btnClearKey').onclick=()=>{ localStorage.removeItem(LS_AIKEY); refreshAiStatus(); toast('AI 키를 삭제했어요'); };
+$('#btnClearKey').onclick=async()=>{
+  localStorage.removeItem(LS_AIKEY); refreshAiStatus();
+  if(window.__cloudKey){ try{ await window.__cloudKey.clear(); }catch(e){ console.warn(e); } }
+  toast('AI 키를 삭제했어요 (계정에서도 제거)');
+};
 
 function fileToBase64(file){
   return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(String(r.result).split(',')[1]); r.onerror=rej; r.readAsDataURL(file); });
@@ -1008,6 +1018,15 @@ window.addEventListener('resize',()=>{const ta=$('#orderText');if(ta.style.displ
   if(typeof firebase==='undefined'){ console.error('Firebase SDK 로드 실패'); return; }
   firebase.initializeApp(firebaseConfig);
   const auth = firebase.auth();
+  const db = (firebase.firestore)?firebase.firestore():null;   // AI 키를 계정에 저장 → 모든 기기 공유
+
+  // 로그인한 사용자의 Firestore 문서(users/{uid}/config/app)에 AI 키를 저장/조회 → 기기 간 자동 동기화
+  function keyDoc(){ const u=auth.currentUser; return (db&&u)?db.doc('users/'+u.uid+'/config/app'):null; }
+  window.__cloudKey={
+    save: async k=>{ const d=keyDoc(); if(!d)return false; await d.set({geminiKey:k},{merge:true}); return true; },
+    clear: async ()=>{ const d=keyDoc(); if(!d)return false; await d.set({geminiKey:firebase.firestore.FieldValue.delete()},{merge:true}); return true; },
+    load: async ()=>{ const d=keyDoc(); if(!d)return null; try{ const s=await d.get(); return (s.exists&&s.data().geminiKey)?s.data().geminiKey:null; }catch(e){ console.warn('cloud key load 실패',e); return null; } }
+  };
 
   const $g=id=>document.getElementById(id);
   const gate=$g('authGate'), form=$g('authForm'), booting=$g('authBooting'),
@@ -1045,7 +1064,7 @@ window.addEventListener('resize',()=>{const ta=$('#orderText');if(ta.style.displ
   });
   btnLogout.addEventListener('click',async()=>{ try{ await auth.signOut(); }catch(e){} });
 
-  auth.onAuthStateChanged(user=>{
+  auth.onAuthStateChanged(async user=>{
     booting.style.display='none'; form.hidden=false;
     submit.disabled=false; submit.textContent='로그인';
     if(user){
@@ -1054,6 +1073,15 @@ window.addEventListener('resize',()=>{const ta=$('#orderText');if(ta.style.displ
       userChip.hidden=false; userChip.textContent='👤 '+(user.email||'로그인됨'); userChip.title=user.email||'';
       btnLogout.hidden=false;
       pwEl.value='';
+      // 계정에 저장된 AI 키를 불러와 이 기기에도 적용 (기기 간 동기화)
+      try{
+        const cloudKey=await window.__cloudKey.load();
+        if(cloudKey && cloudKey!==localStorage.getItem('bebepapa.aiKey')){
+          localStorage.setItem('bebepapa.aiKey',cloudKey);
+          if(typeof refreshAiStatus==='function') refreshAiStatus();
+          if(typeof toast==='function') toast('🤖 계정에 저장된 AI 키를 불러왔어요 (모든 기기 자동 적용)');
+        }
+      }catch(e){ console.warn(e); }
     }else{
       gate.classList.remove('hidden');
       document.body.classList.remove('authed');
