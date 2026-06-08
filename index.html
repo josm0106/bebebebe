@@ -7,6 +7,8 @@
 <link rel="preconnect" href="https://cdn.jsdelivr.net" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
 <style>
   :root{
     --bg:#f6f3ea;
@@ -186,9 +188,71 @@
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
   footer.foot{max-width:1280px;margin:0 auto;padding:8px 20px 40px;color:var(--muted);font-size:11.5px;font-weight:600;text-align:center}
   .foot a{color:var(--sage)}
+
+  /* ---------- 로그인 게이트 ---------- */
+  body:not(.authed) .wrap{display:none}
+  body:not(.authed) .fab{display:none}
+  .auth-gate{position:fixed;inset:0;z-index:100000;background:var(--bg);display:grid;place-items:center;padding:20px;overflow:auto}
+  .auth-gate.hidden{display:none}
+  .auth-card{width:100%;max-width:382px;background:var(--paper);border:1px solid var(--line);border-radius:20px;box-shadow:0 10px 40px rgba(70,70,40,.12);padding:32px 28px 22px;text-align:center}
+  .auth-logo{width:62px;height:62px;border-radius:18px;background:var(--green-soft);border:1.5px solid #d7dcc5;display:grid;place-items:center;margin:0 auto 14px}
+  .auth-logo svg{width:38px;height:38px}
+  .auth-title{font-size:25px;margin:0;letter-spacing:1px;font-weight:800}
+  .auth-title b{color:var(--sage)}
+  .auth-sub{margin:5px 0 22px;font-size:13px;color:var(--muted);font-weight:700}
+  .auth-booting{display:flex;align-items:center;justify-content:center;gap:10px;color:var(--muted);font-size:13px;font-weight:700;padding:18px 0}
+  .auth-form{display:block;text-align:left}
+  .auth-form label{display:block;font-size:12px;font-weight:800;color:var(--green-d);margin-bottom:13px}
+  .auth-form input{width:100%;margin-top:6px;padding:11px 13px;border:1px solid var(--line);border-radius:11px;font-size:14px;font-family:inherit;outline:none;background:#fffef8}
+  .auth-form input:focus{border-color:var(--sage)}
+  .auth-err{display:none;background:#fdeceb;color:#c0392b;border:1px solid #f3c9c4;border-radius:10px;padding:9px 12px;font-size:12.5px;font-weight:700;margin-bottom:13px}
+  .auth-btn{width:100%;padding:12px;border:0;border-radius:12px;background:var(--green);color:#fff;font-size:15px;font-weight:800;font-family:inherit;cursor:pointer;transition:.15s}
+  .auth-btn:hover{background:var(--green-d)}
+  .auth-btn:disabled{opacity:.6;cursor:default}
+  .auth-toggle{text-align:center;margin-top:15px;font-size:12.5px;color:var(--muted);font-weight:700}
+  .auth-toggle a{color:var(--sage);font-weight:800;text-decoration:none;margin-left:5px;cursor:pointer}
+  .auth-foot{margin:20px 0 0;font-size:11.5px;color:var(--muted);font-weight:600}
+  .userchip{font-size:12px;font-weight:800;color:var(--green-d);background:var(--green-soft);border-radius:9px;padding:7px 11px;display:inline-flex;align-items:center;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 </style>
 </head>
 <body>
+
+<!-- ============ 로그인 게이트 (로그인해야만 메뉴 조회 가능) ============ -->
+<div id="authGate" class="auth-gate">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#8a9a5b" stroke-width="1.6">
+        <circle cx="12" cy="12.5" r="7.2" fill="#fff"/>
+        <circle cx="9.4" cy="12" r="1" fill="#5f6b4c" stroke="none"/>
+        <circle cx="14.6" cy="12" r="1" fill="#5f6b4c" stroke="none"/>
+        <path d="M9.6 15.2c1.4 1.1 3.4 1.1 4.8 0" stroke-linecap="round"/>
+        <path d="M5.2 9.5c-.2-2 .8-3 2.2-2.8M18.8 9.5c.2-2-.8-3-2.2-2.8" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <h1 class="auth-title">BÉBÉ<b>PAPA</b></h1>
+    <p class="auth-sub">주문 도우미 · 로그인</p>
+
+    <div id="authBooting" class="auth-booting"><span class="spinner"></span> 로그인 상태 확인 중…</div>
+
+    <form id="authForm" class="auth-form" hidden autocomplete="on">
+      <label>이메일
+        <input type="email" id="authEmail" autocomplete="username" required placeholder="you@example.com" />
+      </label>
+      <label>비밀번호
+        <input type="password" id="authPw" autocomplete="current-password" required placeholder="비밀번호 (6자 이상)" />
+      </label>
+      <div class="auth-err" id="authErr"></div>
+      <button type="submit" class="auth-btn" id="authSubmit">로그인</button>
+      <div class="auth-toggle">
+        <span id="authToggleText">계정이 없으신가요?</span>
+        <a id="authToggle" role="button" tabindex="0">회원가입</a>
+      </div>
+    </form>
+
+    <p class="auth-foot">🔒 로그인한 사용자만 메뉴를 조회할 수 있어요</p>
+  </div>
+</div>
+
 <header class="appbar">
   <div class="appbar-inner">
     <div class="brand">
@@ -211,6 +275,8 @@
       <button class="btn ghost" id="btnDemo" title="형광펜 토글 예시 적용">✨ 예시 보기</button>
       <button class="btn ghost" id="btnEdit" aria-pressed="false">✏️ 편집</button>
       <button class="btn ghost danger" id="btnReset">↺ 수량 초기화</button>
+      <span class="userchip" id="userChip" hidden></span>
+      <button class="btn ghost" id="btnLogout" hidden>🔓 로그아웃</button>
     </div>
   </div>
 </header>
@@ -727,7 +793,7 @@ function splitIntoColumns(rawLines){
     if(!any && line.trim()) cols[0].push(line.trim());
   });
   // read column 0 fully, then 1, then 2 — matches the brand's left→right cell order
-  return [...cols[0],' COL',...cols[1],' COL',...cols[2]];
+  return [...cols[0],'COLBREAK',...cols[1],'COLBREAK',...cols[2]];
 }
 function fmtDate(digits){
   const d=digits.replace(/[^\d]/g,'');
@@ -740,7 +806,7 @@ function parseMenu(data){
   const lines=splitIntoColumns(getRawLines(data));
   const dates=[];let cur=null,sec='mid';let month='';
   for(let raw of lines){
-    if(raw===' COL'){cur=null;sec='mid';continue;}
+    if(raw==='COLBREAK'){cur=null;sec='mid';continue;}
     let t=raw.replace(/\s{2,}/g,' ').trim();
     if(!t)continue;
     const dm=t.match(DATEHEAD_RE);
@@ -776,6 +842,85 @@ function fallbackFromText(text){
 /* ---------- init ---------- */
 loadState();render();
 window.addEventListener('resize',()=>{const ta=$('#orderText');if(ta.style.display!=='none')autoGrow(ta);});
+</script>
+
+<!-- ============ Firebase 인증 (로그인 게이트) ============ -->
+<script>
+(function(){
+  const firebaseConfig = {
+    apiKey: "AIzaSyD5zH9YzZuZ90vgJqZUC-y2MefJ5Iqnji4",
+    authDomain: "eliteforce-97939.firebaseapp.com",
+    projectId: "eliteforce-97939",
+    storageBucket: "eliteforce-97939.firebasestorage.app",
+    messagingSenderId: "628068933819",
+    appId: "1:628068933819:web:0f423a2995d47256bc899e",
+    measurementId: "G-D8QWPPY4ZW"
+  };
+  if(typeof firebase==='undefined'){ console.error('Firebase SDK 로드 실패'); return; }
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+
+  const $g=id=>document.getElementById(id);
+  const gate=$g('authGate'), form=$g('authForm'), booting=$g('authBooting'),
+        emailEl=$g('authEmail'), pwEl=$g('authPw'), errEl=$g('authErr'),
+        submit=$g('authSubmit'), toggle=$g('authToggle'), toggleText=$g('authToggleText'),
+        userChip=$g('userChip'), btnLogout=$g('btnLogout');
+  let mode='login';
+
+  const ERR={
+    'auth/invalid-email':'이메일 형식이 올바르지 않아요.',
+    'auth/user-not-found':'등록되지 않은 계정이에요. 회원가입을 해주세요.',
+    'auth/wrong-password':'비밀번호가 올바르지 않아요.',
+    'auth/invalid-credential':'이메일 또는 비밀번호가 올바르지 않아요.',
+    'auth/email-already-in-use':'이미 가입된 이메일이에요. 로그인해 주세요.',
+    'auth/weak-password':'비밀번호는 6자 이상이어야 해요.',
+    'auth/missing-password':'비밀번호를 입력해 주세요.',
+    'auth/too-many-requests':'시도가 많아 잠시 후 다시 시도해 주세요.',
+    'auth/network-request-failed':'네트워크 연결을 확인해 주세요.',
+    'auth/operation-not-allowed':'이메일/비밀번호 로그인이 콘솔에서 비활성화되어 있어요.'
+  };
+  function showErr(m){ errEl.textContent=m||''; errEl.style.display=m?'block':'none'; }
+  function setMode(m){
+    mode=m;
+    if(m==='login'){ submit.textContent='로그인'; toggleText.textContent='계정이 없으신가요?'; toggle.textContent='회원가입'; pwEl.autocomplete='current-password'; }
+    else{ submit.textContent='가입하고 시작'; toggleText.textContent='이미 계정이 있으신가요?'; toggle.textContent='로그인'; pwEl.autocomplete='new-password'; }
+    showErr('');
+  }
+  toggle.addEventListener('click',()=>setMode(mode==='login'?'signup':'login'));
+  toggle.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); setMode(mode==='login'?'signup':'login'); }});
+
+  form.addEventListener('submit',async e=>{
+    e.preventDefault(); showErr('');
+    const email=emailEl.value.trim(), pw=pwEl.value;
+    submit.disabled=true; const orig=submit.textContent; submit.textContent='처리 중…';
+    try{
+      if(mode==='login') await auth.signInWithEmailAndPassword(email,pw);
+      else await auth.createUserWithEmailAndPassword(email,pw);
+      // 성공 시 onAuthStateChanged 가 화면 전환 처리
+    }catch(err){
+      showErr(ERR[err.code] || ('오류: '+(err.message||err.code)));
+      submit.disabled=false; submit.textContent=orig;
+    }
+  });
+  btnLogout.addEventListener('click',async()=>{ try{ await auth.signOut(); }catch(e){} });
+
+  auth.onAuthStateChanged(user=>{
+    booting.style.display='none'; form.hidden=false; submit.disabled=false;
+    if(submit.textContent==='처리 중…') setMode(mode);
+    if(user){
+      gate.classList.add('hidden');
+      document.body.classList.add('authed');
+      userChip.hidden=false; userChip.textContent='👤 '+(user.email||'로그인됨'); userChip.title=user.email||'';
+      btnLogout.hidden=false;
+      pwEl.value='';
+    }else{
+      gate.classList.remove('hidden');
+      document.body.classList.remove('authed');
+      userChip.hidden=true; btnLogout.hidden=true;
+      setMode('login');
+    }
+  });
+})();
 </script>
 </body>
 </html>

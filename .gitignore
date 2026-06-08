@@ -5,6 +5,9 @@
 # 빈 임시 파일
 주문서 .txt
 
+# Claude Code 내부 기록 파일
+.commit_message.txt
+
 # 에디터/OS
 .DS_Store
 Thumbs.db
