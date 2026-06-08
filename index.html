@@ -104,7 +104,15 @@
   .codechip{display:inline-block;background:var(--green-soft);color:var(--green-d);border-radius:7px;padding:1px 8px;font-weight:800;font-size:12px}
   #jsonImport{width:100%;min-height:90px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:12px;font-family:ui-monospace,Menlo,Consolas,monospace;resize:vertical;outline:none;background:#fffef8}
   #jsonImport:focus{border-color:var(--sage)}
-  .acc-actions{display:flex;gap:8px;margin-top:9px}
+  .acc-actions{display:flex;gap:8px;margin-top:9px;flex-wrap:wrap}
+  .acc-steps{margin:0 0 10px;padding-left:20px;font-size:12.5px;color:#6b6a5e;line-height:1.7}
+  .acc-steps a{color:var(--sage);font-weight:800}
+  #aiKey{border:1px solid var(--line);border-radius:9px;padding:9px 11px;font-size:12.5px;font-family:ui-monospace,Menlo,Consolas,monospace;outline:none;background:#fffef8}
+  #aiKey:focus{border-color:var(--sage)}
+  .ai-status{margin-top:8px;font-size:12px;font-weight:800}
+  .ai-status.on{color:#3a7d3a}
+  .ai-status.off{color:var(--muted)}
+  .acc-hr{border:0;border-top:1px dashed var(--line);margin:14px 0 4px}
 
   /* ---------- info banner ---------- */
   .banner{display:flex;gap:10px;align-items:flex-start;background:#fffdf0;border:1px solid #f0e8b8;border-radius:13px;padding:11px 14px;margin-bottom:16px;font-size:12.5px;color:#7a6e3a;font-weight:600}
@@ -301,14 +309,27 @@
           <button class="btn sm primary" id="btnFile">🖼️ 이미지 파일 선택</button>
           <input type="file" id="fileInput" accept="image/*" hidden />
         </div>
-        <small style="display:block;margin-top:8px">붙여넣으면 자동으로 글자를 인식해 메뉴로 만들어 드려요.</small>
+        <small style="display:block;margin-top:8px">붙여넣으면 자동으로 글자를 인식해 메뉴로 만들어 드려요. <b id="aiHint" style="color:var(--sage);display:none">🤖 AI 정확 인식 켜짐</b></small>
       </div>
 
       <details class="accurate" id="accuratePanel">
-        <summary>🤖 더 정확하게 인식하기 — Claude로 JSON 만들어 가져오기</summary>
+        <summary>🤖 AI 정확 인식 설정 — 사진을 정확히 읽으려면 (권장 · 무료)</summary>
         <div class="acc-body">
-          <p>메뉴표 글자가 빽빽하면 브라우저 자동 인식이 완벽하지 않을 수 있어요. <b>가장 정확한 방법</b>은 지금 쓰고 계신 <b>Claude Code</b>에 메뉴 스크린샷을 붙여넣고
-          <span class="codechip">이 메뉴를 사이트 JSON으로 만들어줘</span> 라고 한 뒤, 받은 JSON을 아래에 붙여넣고 <b>불러오기</b>를 누르는 거예요.</p>
+          <p><b>무료 AI 키</b>를 한 번만 등록하면, 사진을 붙여넣을 때 <b>AI가 메뉴를 정확히</b> 읽어줍니다.
+          (브라우저 기본 인식은 빽빽한 표에서 날짜·글자가 깨질 수 있어요.)</p>
+          <ol class="acc-steps">
+            <li><a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">aistudio.google.com/apikey</a> 접속 → 구글 로그인 → <b>Create API key</b> → 키 복사</li>
+            <li>아래 칸에 붙여넣고 <b>저장</b> (키는 이 브라우저에만 저장돼요)</li>
+          </ol>
+          <div class="acc-actions">
+            <input type="password" id="aiKey" placeholder="Gemini API 키 (AIza...)" autocomplete="off" spellcheck="false" style="flex:1;min-width:180px" />
+            <button class="btn sm primary" id="btnSaveKey">저장</button>
+            <button class="btn sm" id="btnClearKey">삭제</button>
+          </div>
+          <div id="aiStatus" class="ai-status"></div>
+          <hr class="acc-hr" />
+          <p>키 없이 <b>100% 정확</b>히 하려면: 쓰고 계신 <b>Claude Code</b>에 메뉴 사진을 붙여넣고
+          <span class="codechip">이 메뉴를 사이트 JSON으로 만들어줘</span> → 받은 JSON을 아래에 붙여넣고 불러오기.</p>
           <textarea id="jsonImport" spellcheck="false" placeholder='{"month":"6","dates":[{"date":"6/1","day":"월","mid":[{"name":"...","price":null}],"toddler":[{"name":"...","price":6}]}]}'></textarea>
           <div class="acc-actions">
             <button class="btn sm primary" id="btnImport">📥 JSON 불러오기</button>
@@ -455,6 +476,7 @@ let qty = {};              // key -> quantity
 const LS_MENU = 'bebepapa.menu.v1';
 const LS_QTY  = 'bebepapa.qty.v1';
 const LS_VER  = 'bebepapa.ver';
+const LS_AIKEY= 'bebepapa.aiKey';
 const key = (di,sec,ii)=>di+':'+sec+':'+ii;
 
 const $ = s=>document.querySelector(s);
@@ -744,6 +766,54 @@ $('#btnExport').onclick=async()=>{
   toast('현재 메뉴 JSON을 복사했어요 📤');
 };
 
+/* ---------- AI 정확 인식(Gemini) 키 관리 ---------- */
+function getAiKey(){ return localStorage.getItem(LS_AIKEY)||''; }
+function refreshAiStatus(){
+  const k=getAiKey(); const el=$('#aiStatus'); if(!el)return;
+  if(k){ el.textContent='✅ AI 정확 인식 켜짐 — 이제 사진을 붙여넣으면 AI가 정확히 읽어요'; el.className='ai-status on'; if($('#aiKey'))$('#aiKey').value=''; }
+  else { el.textContent='⚪ AI 키 미등록 — 등록 전에는 브라우저 기본 인식(정확도 낮음)을 사용해요'; el.className='ai-status off'; }
+  const hint=$('#aiHint'); if(hint) hint.style.display=k?'inline':'none';
+}
+$('#btnSaveKey').onclick=()=>{
+  const v=($('#aiKey').value||'').trim();
+  if(!v){toast('키를 먼저 붙여넣어 주세요');return;}
+  if(!/^AIza[\w-]{20,}$/.test(v) && !confirm('키 형식이 일반적인 Gemini 키(AIza...)와 달라요. 그래도 저장할까요?'))return;
+  localStorage.setItem(LS_AIKEY,v); refreshAiStatus(); toast('AI 키를 저장했어요 — 이제 사진을 붙여넣어 보세요 ✅');
+};
+$('#btnClearKey').onclick=()=>{ localStorage.removeItem(LS_AIKEY); refreshAiStatus(); toast('AI 키를 삭제했어요'); };
+
+function fileToBase64(file){
+  return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(String(r.result).split(',')[1]); r.onerror=rej; r.readAsDataURL(file); });
+}
+async function recognizeWithGemini(file,key){
+  const b64=await fileToBase64(file);
+  const prompt=`이 이미지는 'BÉBÉPAPA(베베파파)' 수제 이유식/유아식 월간 메뉴표입니다. 표를 정확히 읽어 아래 JSON 형식으로만 응답하세요(설명/마크다운/코드펜스 금지).
+{"month":"6","dates":[{"date":"6/1","day":"월","note":null,"mid":[{"name":"메뉴명","price":null}],"toddler":[{"name":"메뉴명","price":6}]}]}
+규칙:
+- 각 날짜 칸 헤더(예: "6/1 (월)")에서 date는 "월/일", day는 요일 한 글자.
+- [중기/완료기] 항목은 mid, [유아식] 항목은 toddler 에 넣으세요.
+- 유아식 항목 끝의 가격(6.0→6, 5.5→5.5)은 price 에 숫자로. 중기/완료기는 보통 price=null.
+- 메뉴명의 ★ 표시는 그대로 유지. 괄호(제철) 등도 그대로.
+- 선거일/휴무일 같은 공지 칸은 mid/toddler 를 빈 배열로 두고 안내 문구를 note 에 넣으세요(일반 메뉴 칸은 note=null).
+- 보이는 글자 그대로 정확히 옮기고 추측하지 마세요. 모든 날짜와 모든 항목을 빠짐없이 포함하세요.`;
+  const body={contents:[{parts:[{inline_data:{mime_type:(file.type||'image/png'),data:b64}},{text:prompt}]}],generationConfig:{responseMimeType:'application/json',temperature:0}};
+  const model='gemini-2.5-flash';
+  const url='https://generativelanguage.googleapis.com/v1beta/models/'+model+':generateContent?key='+encodeURIComponent(key);
+  const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(!r.ok){
+    let msg=r.status+''; try{ const ej=await r.json(); msg=(ej.error&&ej.error.message)||msg; }catch(e){}
+    if(r.status===400&&/API key not valid/i.test(msg)) throw new Error('API 키가 올바르지 않아요. 키를 다시 확인해 주세요.');
+    if(r.status===403) throw new Error('키 권한 오류 — Gemini(Generative Language) API가 켜져 있는지 확인하세요.');
+    if(r.status===429) throw new Error('무료 사용량 초과 — 잠시 후 다시 시도해 주세요.');
+    throw new Error(msg);
+  }
+  const j=await r.json();
+  const text=((j.candidates&&j.candidates[0]&&j.candidates[0].content&&j.candidates[0].content.parts)||[]).map(p=>p.text||'').join('');
+  if(!text) throw new Error('AI 응답이 비어 있어요 (이미지가 잘 안 보였을 수 있어요)');
+  let obj; try{ obj=JSON.parse(text); }catch(e){ const m=text.match(/\{[\s\S]*\}/); if(!m)throw new Error('AI 응답을 해석하지 못했어요'); obj=JSON.parse(m[0]); }
+  return normalizeMenu(obj);
+}
+
 /* =========================================================================
    IMAGE PASTE / DROP / FILE  →  OCR  →  PARSE
    ========================================================================= */
@@ -772,8 +842,31 @@ function setOcr(show,label,sub,pct){
 async function handleImage(file){
   const url=URL.createObjectURL(file);
   const pv=$('#ocrPreview');pv.src=url;pv.style.display='block';
-  setOcr(true,'이미지를 인식하는 중…','한글 인식 엔진을 준비하고 있어요 (첫 실행은 다운로드로 시간이 걸려요)',2);
   $('#orderAside').classList.remove('open');
+
+  // 1) AI 키가 있으면 Gemini로 정확 인식 (권장)
+  const aiKey=getAiKey();
+  if(aiKey){
+    setOcr(true,'🤖 AI가 메뉴를 정확히 읽는 중…','보통 5~15초 정도 걸려요',35);
+    try{
+      const parsed=await recognizeWithGemini(file,aiKey);
+      if(parsed.dates.length){
+        menu=parsed; qty={}; persist(); render();
+        toast('🤖 AI 인식 완료! '+parsed.dates.length+'개 날짜 · 메뉴 '+totalMenuLines()+'종 — 정확한지 한 번 확인해 주세요');
+        setTimeout(()=>setOcr(false),700);
+        return;
+      }
+      throw new Error('날짜를 찾지 못했어요');
+    }catch(err){
+      console.error('Gemini 인식 실패:',err);
+      setOcr(true,'AI 인식 실패 — 브라우저 인식으로 시도해요','('+(err&&err.message||err)+')',5);
+      toast('AI 인식 실패: '+(err&&err.message||err));
+      // 아래 Tesseract 폴백으로 진행
+    }
+  }
+
+  // 2) (폴백) 브라우저 내장 OCR
+  setOcr(true,'이미지를 인식하는 중…','한글 인식 엔진을 준비하고 있어요 (첫 실행은 다운로드로 시간이 걸려요)',2);
   try{
     const {data}=await Tesseract.recognize(url,'kor+eng',{
       logger:m=>{
@@ -882,6 +975,8 @@ function fallbackFromText(text){
 
 /* ---------- init ---------- */
 loadState();render();
+refreshAiStatus();
+if(!getAiKey()){ $('#accuratePanel').open=true; }   // 키 없으면 정확 인식 설정을 펼쳐 안내
 window.addEventListener('resize',()=>{const ta=$('#orderText');if(ta.style.display!=='none')autoGrow(ta);});
 </script>
 
