@@ -9,6 +9,7 @@
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <style>
   :root{
     --bg:#f6f3ea;
@@ -126,13 +127,13 @@
   .item{display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:9px;transition:background .12s;position:relative}
   .item:hover{background:#f7f6ee}
   .item .name{flex:1;font-size:13px;font-weight:600;line-height:1.35;cursor:pointer;padding:1px 2px;border-radius:5px}
+  .item .name .nm{border-radius:2px}
   .item .price{font-size:11px;color:var(--muted);font-weight:700;flex:none}
-  /* highlighter on selected */
-  .item.on{background:#fffbe2}
-  .item.on .name{
-    background:linear-gradient(180deg,transparent 0 14%,var(--hl) 14% 86%,transparent 86% 100%);
-    box-decoration-break:clone;-webkit-box-decoration-break:clone;
-    font-weight:800;padding:1px 3px;border-radius:3px;
+  /* 형광펜: 글자(인라인)에만 칠해지고, 여러 줄도 줄별로 정렬됨 */
+  .item.on .nm{
+    background-image:linear-gradient(180deg,transparent 0 14%,var(--hl) 14%,var(--hl) 90%,transparent 90%);
+    -webkit-box-decoration-break:clone;box-decoration-break:clone;
+    padding:0 2px;border-radius:2px;font-weight:800;
   }
   .item.on .price{color:var(--ink)}
 
@@ -145,6 +146,15 @@
   .item.on .stepper{border-color:#e8d96a}
   .item.on .qty{color:var(--green-d)}
 
+  /* 이미지 저장(캡처) 모드: +/− 버튼 숨기고 선택된 항목 수량만 ×N 으로 표시 */
+  .capturing .stepper{border:0;background:transparent}
+  .capturing .stepper button{display:none}
+  .capturing .item:not(.on) .stepper{display:none}
+  .capturing .item.on .stepper .qty{border:0;min-width:auto;height:auto;line-height:1.35;color:var(--green-d);font-weight:800}
+  .capturing .item.on .stepper .qty::before{content:'×'}
+  .capturing .del-item,.capturing .add-line{display:none}
+  .capturing .item:hover{background:transparent}
+
   .note-cell{font-size:12px;color:#7a6e3a;background:#fffdf0;border-radius:9px;padding:9px 10px;font-weight:600;line-height:1.5;white-space:pre-line}
   .notes-card{margin-top:18px;background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:14px 16px;box-shadow:var(--shadow)}
   .notes-title{font-size:13px;font-weight:800;margin-bottom:8px;color:var(--green-d)}
@@ -152,7 +162,7 @@
   .note-line:first-of-type{color:var(--ink);font-weight:800}
 
   /* edit affordances */
-  .editing .item .name{border:1px dashed #d8d4c4;background:#fff}
+  .editing .item .nm{outline:1px dashed #d8d4c4;background:#fff;border-radius:4px;padding:0 3px}
   .del-item{display:none;border:0;background:transparent;color:var(--red);font-size:15px;font-weight:800;line-height:1;padding:0 2px}
   .editing .del-item{display:block}
   .add-line{display:none;font-size:11.5px;color:var(--sage);font-weight:800;background:none;border:1px dashed #c9d0ad;border-radius:8px;padding:4px 8px;margin-top:4px}
@@ -352,7 +362,10 @@
         </div>
         <div class="order-foot">
           <button class="btn primary" id="btnCopy">📋 복사</button>
-          <button class="btn" id="btnDownload">💾 저장</button>
+          <button class="btn" id="btnDownload">💾 텍스트</button>
+        </div>
+        <div class="order-foot" style="border-top:0;padding-top:0">
+          <button class="btn" id="btnImage" style="flex:1">📸 형광펜 메뉴 이미지로 저장</button>
         </div>
       </div>
     </aside>
@@ -512,11 +525,13 @@ function sectionLabel(t){const e=document.createElement('div');e.className='secl
 function itemRow(di,sec,ii,it){
   const k=key(di,sec,ii);const q=qty[k]||0;
   const row=document.createElement('div');row.className='item'+(q>0?' on':'');row.dataset.k=k;
-  const name=document.createElement('div');name.className='name';name.textContent=it.name;
-  name.contentEditable=isEditing;
+  const name=document.createElement('div');name.className='name';
+  const nm=document.createElement('span');nm.className='nm';nm.textContent=it.name; // 형광펜은 이 span(글자)에만 적용
+  name.appendChild(nm);
+  nm.contentEditable=isEditing;
   name.addEventListener('click',e=>{ if(isEditing) return; bump(di,sec,ii,1); });
-  name.addEventListener('blur',()=>{ if(isEditing){ it.name=name.textContent.trim(); persist(); } });
-  name.addEventListener('keydown',e=>{ if(isEditing&&e.key==='Enter'){e.preventDefault();name.blur();} });
+  nm.addEventListener('blur',()=>{ if(isEditing){ it.name=nm.textContent.trim(); persist(); } });
+  nm.addEventListener('keydown',e=>{ if(isEditing&&e.key==='Enter'){e.preventDefault();nm.blur();} });
   row.appendChild(name);
   if(it.price!=null){const p=document.createElement('span');p.className='price';p.textContent=fmtPrice(it.price);row.appendChild(p);}
   // stepper
@@ -662,6 +677,30 @@ $('#btnDownload').onclick=()=>{
   const blob=new Blob([t],{type:'text/plain;charset=utf-8'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);
   a.download='베베파파_주문서.txt';a.click();URL.revokeObjectURL(a.href);toast('주문서를 저장했어요 💾');
+};
+/* 형광펜 칠해진 메뉴 전체를 이미지(PNG)로 저장 */
+$('#btnImage').onclick=async()=>{
+  if(typeof html2canvas==='undefined'){ toast('이미지 모듈을 불러오는 중이에요. 잠시 후 다시 눌러주세요'); return; }
+  const o=buildOrder();
+  if(!o.items){ toast('먼저 메뉴 수량을 올려주세요 (형광펜 표시될 항목)'); return; }
+  const wasEditing=isEditing;
+  if(wasEditing){ isEditing=false; render(); }   // 편집 점선 제거된 깔끔한 상태로 캡처
+  document.body.classList.add('capturing');
+  $('#btnImage').textContent='📸 이미지 만드는 중…'; $('#btnImage').disabled=true;
+  try{
+    const bg=getComputedStyle(document.body).backgroundColor||'#f6f3ea';
+    const canvas=await html2canvas(grid,{scale:2,backgroundColor:bg,useCORS:true,logging:false});
+    await new Promise(res=>canvas.toBlob(b=>{
+      const a=document.createElement('a');a.href=URL.createObjectURL(b);
+      a.download='베베파파_주문_'+(menu.month||'')+'월.png';a.click();URL.revokeObjectURL(a.href);res();
+    },'image/png'));
+    toast('형광펜 메뉴를 이미지로 저장했어요 📸');
+  }catch(e){ console.error(e); toast('이미지 저장 실패: '+(e&&e.message||e)); }
+  finally{
+    document.body.classList.remove('capturing');
+    $('#btnImage').textContent='📸 형광펜 메뉴 이미지로 저장'; $('#btnImage').disabled=false;
+    if(wasEditing){ isEditing=true; render(); }
+  }
 };
 
 /* ---------- mobile FAB ---------- */
@@ -820,14 +859,20 @@ function parseMenu(data){
   }
   return {month:month||MENU_DATA.month,dates:dates.filter(d=>d.mid.length||d.toddler.length||d.note),footer:[]};
 }
+// 메뉴가 아닌(공지·범례·브랜드·연락처·라벨 등) 줄을 걸러내는 패턴
+const NOISE_RE=/읽어주세요|주문\s*마감|연락|취합|알레르기|샘플|단계\s*변경|육수|식재료|선거|행사|연휴|보내세요|휴무|배송|변경될|문의|전화|☎|\d{2,4}[-.\s]\d{3,4}[-.\s]\d{4}|베베파파|b[eé]b[eé]papa|전문점|수제\s*이유식|견과류|들어가는|표시|아식|^\s*\[?\s*(중기|완료|유아)/i;
 function maybeItem(cur,sec,t){
-  t=t.replace(/^[•·▪\-\*\s]+/,'').replace(/[|ㅣ]/g,' ').replace(/\s{2,}/g,' ').trim();
+  t=t.replace(/^[\s•·▪◦∙\-\*~#＃※@]+/,'').replace(/[|ㅣ]/g,' ').replace(/[\[\]]/g,' ').replace(/\s{2,}/g,' ').trim();
   if(t.length<2)return;
-  if(/읽어주세요|주문\s*마감|전화|☎|연락|취합|알레르기|샘플요청|단계\s*변경|육수|식재료|선거|행사|연휴|보내세요|휴무/.test(t))return; // notice/footer noise
+  if(NOISE_RE.test(t))return;                 // 공지/범례/브랜드 등 비식품 줄 제외
   let price=null;const pm=t.match(PRICE_RE);
   if(pm){price=parseFloat(pm[1].replace(',','.'));t=t.slice(0,pm.index).trim();}
+  // 휴리스틱: 한글 2자 미만(기호·숫자 위주)이거나, 너무 길면(공지문) 메뉴로 보지 않음
+  const hangul=(t.match(/[가-힣]/g)||[]).length;
+  if(hangul<2)return;
+  if(t.replace(/\s/g,'').length>22)return;
   if(price!=null)sec='toddler';
-  if(t.length>=2)cur[sec].push({name:t,price});
+  cur[sec].push({name:t,price});
 }
 function fallbackFromText(text){
   const items=(text||'').split(/\n+/).map(s=>s.trim()).filter(s=>s.length>=2).slice(0,60);
