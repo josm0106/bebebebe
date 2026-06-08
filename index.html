@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>BÉBÉPAPA · 메뉴 주문 도우미</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<style>
+  :root{
+    --bg:#f6f3ea;
+    --paper:#ffffff;
+    --ink:#2f312b;
+    --muted:#8d8b7f;
+    --line:#e7e3d6;
+    --green:#5f6b4c;        /* date header bar */
+    --green-d:#4c5640;
+    --green-soft:#eef0e4;   /* section label bg */
+    --sage:#8a9a5b;         /* logo / accent */
+    --hl:#ffe94a;           /* highlighter yellow */
+    --hl-soft:#fff6c2;
+    --red:#d9594a;
+    --shadow:0 1px 2px rgba(60,60,40,.05), 0 8px 24px rgba(70,70,40,.06);
+    --radius:16px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    font-family:'Pretendard',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    background:var(--bg);color:var(--ink);
+    -webkit-font-smoothing:antialiased;line-height:1.45;
+  }
+  button{font-family:inherit;cursor:pointer}
+  /* ---------- top bar ---------- */
+  header.appbar{
+    position:sticky;top:0;z-index:40;
+    background:rgba(246,243,234,.85);backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--line);
+  }
+  .appbar-inner{max-width:1280px;margin:0 auto;padding:12px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:11px;margin-right:auto}
+  .logo{
+    width:42px;height:42px;border-radius:13px;background:var(--green-soft);
+    display:grid;place-items:center;border:1.5px solid #d7dcc5;flex:none;
+  }
+  .logo svg{width:26px;height:26px}
+  .brand h1{font-size:18px;margin:0;letter-spacing:.5px;font-weight:800}
+  .brand h1 b{color:var(--sage)}
+  .brand p{margin:0;font-size:11.5px;color:var(--muted);font-weight:600;letter-spacing:.4px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .btn{
+    border:1px solid var(--line);background:var(--paper);color:var(--ink);
+    padding:9px 14px;border-radius:11px;font-size:13px;font-weight:700;
+    display:inline-flex;align-items:center;gap:7px;transition:.15s;white-space:nowrap;
+  }
+  .btn:hover{border-color:#cfcab8;transform:translateY(-1px)}
+  .btn.primary{background:var(--green);color:#fff;border-color:var(--green)}
+  .btn.primary:hover{background:var(--green-d)}
+  .btn.ghost{background:transparent}
+  .btn.danger{color:var(--red)}
+  .btn.sm{padding:5px 9px;font-size:12px;border-radius:9px}
+  .btn[aria-pressed="true"]{background:var(--sage);color:#fff;border-color:var(--sage)}
+
+  /* ---------- layout ---------- */
+  .wrap{max-width:1280px;margin:0 auto;padding:18px 20px 120px}
+  .layout{display:grid;grid-template-columns:minmax(0,1fr) 372px;gap:22px;align-items:start}
+  @media (max-width:1000px){.layout{grid-template-columns:1fr}}
+
+  /* ---------- paste / OCR zone ---------- */
+  .dropzone{
+    border:2px dashed #cdd0bb;border-radius:var(--radius);background:#fbfaf3;
+    padding:22px;text-align:center;transition:.18s;margin-bottom:18px;cursor:pointer;
+  }
+  .dropzone.drag{border-color:var(--sage);background:#f3f5e7}
+  .dropzone .big{font-size:15px;font-weight:800;margin:6px 0 2px}
+  .dropzone .kbd{display:inline-flex;gap:4px;align-items:center;margin:0 2px}
+  .kbd b{background:#fff;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:1px 7px;font-size:12px;font-weight:800}
+  .dropzone small{color:var(--muted);font-weight:600}
+  .dz-icon{font-size:30px}
+  .dz-actions{margin-top:12px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+
+  .ocr-status{display:none;margin-bottom:16px;background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:14px 16px;box-shadow:var(--shadow)}
+  .ocr-status.show{display:block}
+  .ocr-row{display:flex;align-items:center;gap:12px}
+  .spinner{width:18px;height:18px;border:2.5px solid var(--green-soft);border-top-color:var(--green);border-radius:50%;animation:spin .8s linear infinite;flex:none}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .bar{height:7px;border-radius:99px;background:var(--green-soft);overflow:hidden;margin-top:10px}
+  .bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--sage),var(--green));transition:width .25s}
+  .ocr-status .label{font-size:13px;font-weight:700}
+  .ocr-status .sub{font-size:11.5px;color:var(--muted);margin-top:2px}
+  .preview{max-height:120px;border-radius:10px;border:1px solid var(--line);margin-top:10px;display:none}
+
+  .accurate{margin-bottom:16px;background:var(--paper);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
+  .accurate>summary{cursor:pointer;list-style:none;padding:12px 16px;font-size:13px;font-weight:800;color:var(--green-d);user-select:none}
+  .accurate>summary::-webkit-details-marker{display:none}
+  .accurate>summary::before{content:'▸ ';color:var(--sage)}
+  .accurate[open]>summary::before{content:'▾ '}
+  .acc-body{padding:0 16px 14px;font-size:12.5px;color:#6b6a5e;line-height:1.6}
+  .acc-body p{margin:0 0 10px}
+  .codechip{display:inline-block;background:var(--green-soft);color:var(--green-d);border-radius:7px;padding:1px 8px;font-weight:800;font-size:12px}
+  #jsonImport{width:100%;min-height:90px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:12px;font-family:ui-monospace,Menlo,Consolas,monospace;resize:vertical;outline:none;background:#fffef8}
+  #jsonImport:focus{border-color:var(--sage)}
+  .acc-actions{display:flex;gap:8px;margin-top:9px}
+
+  /* ---------- info banner ---------- */
+  .banner{display:flex;gap:10px;align-items:flex-start;background:#fffdf0;border:1px solid #f0e8b8;border-radius:13px;padding:11px 14px;margin-bottom:16px;font-size:12.5px;color:#7a6e3a;font-weight:600}
+  .banner b{color:#5f5520}
+
+  /* ---------- menu grid ---------- */
+  .grid-head{display:flex;align-items:center;gap:10px;margin:4px 2px 12px}
+  .grid-head h2{font-size:16px;margin:0;font-weight:800}
+  .grid-head .count{font-size:12px;color:var(--muted);font-weight:700}
+  .menu-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(266px,1fr));gap:14px}
+  .cell{background:var(--paper);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:var(--shadow);display:flex;flex-direction:column}
+  .cell-head{background:var(--green);color:#fff;padding:8px 12px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px}
+  .cell-head .day{opacity:.8;font-size:12px;font-weight:700}
+  .cell-head .cellbadge{margin-left:auto;background:rgba(255,255,255,.18);border-radius:8px;font-size:11px;padding:2px 7px;font-weight:800;display:none}
+  .cell-head .cellbadge.show{display:inline-block}
+  .cell-body{padding:8px 10px 10px}
+  .seclabel{font-size:11px;font-weight:800;color:var(--green-d);background:var(--green-soft);border-radius:7px;padding:3px 8px;display:inline-block;margin:8px 0 5px}
+  .seclabel:first-child{margin-top:2px}
+
+  .item{display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:9px;transition:background .12s;position:relative}
+  .item:hover{background:#f7f6ee}
+  .item .name{flex:1;font-size:13px;font-weight:600;line-height:1.35;cursor:pointer;padding:1px 2px;border-radius:5px}
+  .item .price{font-size:11px;color:var(--muted);font-weight:700;flex:none}
+  /* highlighter on selected */
+  .item.on{background:#fffbe2}
+  .item.on .name{
+    background:linear-gradient(180deg,transparent 0 14%,var(--hl) 14% 86%,transparent 86% 100%);
+    box-decoration-break:clone;-webkit-box-decoration-break:clone;
+    font-weight:800;padding:1px 3px;border-radius:3px;
+  }
+  .item.on .price{color:var(--ink)}
+
+  /* stepper */
+  .stepper{display:flex;align-items:center;gap:0;flex:none;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:#fff}
+  .stepper button{width:24px;height:26px;border:0;background:#fff;font-size:15px;font-weight:800;color:var(--green-d);line-height:1;display:grid;place-items:center}
+  .stepper button:hover{background:var(--green-soft)}
+  .stepper button:disabled{color:#cdcdc0;background:#fafaf4}
+  .stepper .qty{min-width:26px;text-align:center;font-size:13px;font-weight:800;border-left:1px solid var(--line);border-right:1px solid var(--line);height:26px;line-height:26px}
+  .item.on .stepper{border-color:#e8d96a}
+  .item.on .qty{color:var(--green-d)}
+
+  .note-cell{font-size:12px;color:#7a6e3a;background:#fffdf0;border-radius:9px;padding:9px 10px;font-weight:600;line-height:1.5;white-space:pre-line}
+  .notes-card{margin-top:18px;background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:14px 16px;box-shadow:var(--shadow)}
+  .notes-title{font-size:13px;font-weight:800;margin-bottom:8px;color:var(--green-d)}
+  .note-line{font-size:12.5px;color:#6b6a5e;font-weight:600;padding:2px 0;line-height:1.55}
+  .note-line:first-of-type{color:var(--ink);font-weight:800}
+
+  /* edit affordances */
+  .editing .item .name{border:1px dashed #d8d4c4;background:#fff}
+  .del-item{display:none;border:0;background:transparent;color:var(--red);font-size:15px;font-weight:800;line-height:1;padding:0 2px}
+  .editing .del-item{display:block}
+  .add-line{display:none;font-size:11.5px;color:var(--sage);font-weight:800;background:none;border:1px dashed #c9d0ad;border-radius:8px;padding:4px 8px;margin-top:4px}
+  .editing .add-line{display:inline-block}
+  .add-cell{display:none}
+  .editing .add-cell{display:flex}
+
+  /* ---------- order panel ---------- */
+  aside.order{position:sticky;top:74px}
+  .order-card{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+  .order-card h3{margin:0;padding:14px 16px;font-size:15px;font-weight:800;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
+  .order-card h3 .pill{margin-left:auto;background:var(--sage);color:#fff;font-size:12px;border-radius:99px;padding:2px 10px;font-weight:800}
+  .order-out{padding:0;margin:0}
+  textarea#orderText{width:100%;border:0;resize:vertical;min-height:230px;max-height:50vh;padding:14px 16px;font-size:13px;line-height:1.65;font-family:'Pretendard',monospace;color:var(--ink);background:#fffef8;outline:none}
+  .order-empty{padding:34px 18px;text-align:center;color:var(--muted);font-size:13px;font-weight:600}
+  .order-empty .e{font-size:30px;display:block;margin-bottom:8px}
+  .order-foot{display:flex;gap:8px;padding:12px 14px;border-top:1px solid var(--line);background:#fbfaf3}
+  .order-foot .btn{flex:1;justify-content:center}
+  .totals{display:flex;justify-content:space-between;padding:10px 16px;font-size:12.5px;font-weight:700;border-top:1px solid var(--line);color:var(--muted)}
+  .totals b{color:var(--ink)}
+
+  /* mobile order FAB */
+  .fab{display:none;position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:50;background:var(--green);color:#fff;border:0;padding:13px 22px;border-radius:99px;font-weight:800;font-size:14px;box-shadow:0 8px 24px rgba(60,70,40,.28);gap:9px;align-items:center}
+  .fab .pill{background:rgba(255,255,255,.22);border-radius:99px;padding:1px 9px;font-size:13px}
+  @media (max-width:1000px){
+    aside.order{display:none;position:fixed;inset:auto 12px 12px 12px;top:auto;z-index:60}
+    aside.order.open{display:block}
+    .fab{display:inline-flex}
+    .order-card{max-height:78vh;display:flex;flex-direction:column}
+    textarea#orderText{max-height:46vh}
+  }
+  .toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;padding:11px 18px;border-radius:11px;font-size:13px;font-weight:700;opacity:0;pointer-events:none;transition:.25s;z-index:80}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  footer.foot{max-width:1280px;margin:0 auto;padding:8px 20px 40px;color:var(--muted);font-size:11.5px;font-weight:600;text-align:center}
+  .foot a{color:var(--sage)}
+</style>
+</head>
+<body>
+<header class="appbar">
+  <div class="appbar-inner">
+    <div class="brand">
+      <div class="logo" title="BÉBÉPAPA">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#8a9a5b" stroke-width="1.6">
+          <circle cx="12" cy="12.5" r="7.2" fill="#fff"/>
+          <circle cx="9.4" cy="12" r="1" fill="#5f6b4c" stroke="none"/>
+          <circle cx="14.6" cy="12" r="1" fill="#5f6b4c" stroke="none"/>
+          <path d="M9.6 15.2c1.4 1.1 3.4 1.1 4.8 0" stroke-linecap="round"/>
+          <path d="M5.2 9.5c-.2-2 .8-3 2.2-2.8M18.8 9.5c.2-2-.8-3-2.2-2.8" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div>
+        <h1>BÉBÉ<b>PAPA</b> 주문 도우미</h1>
+        <p>수제 이유식 &amp; 유아식 · 스크린샷 붙여넣고 수량만 톡톡</p>
+      </div>
+    </div>
+    <div class="toolbar">
+      <button class="btn ghost" id="btnDefault" title="내장된 6월 메뉴 불러오기">📅 기본 6월 메뉴</button>
+      <button class="btn ghost" id="btnDemo" title="형광펜 토글 예시 적용">✨ 예시 보기</button>
+      <button class="btn ghost" id="btnEdit" aria-pressed="false">✏️ 편집</button>
+      <button class="btn ghost danger" id="btnReset">↺ 수량 초기화</button>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="layout">
+    <!-- ============ MAIN ============ -->
+    <main>
+      <div class="dropzone" id="dropzone" tabindex="0">
+        <div class="dz-icon">📋</div>
+        <div class="big">메뉴 스크린샷을 여기에 붙여넣으세요</div>
+        <small>
+          <span class="kbd"><b>Ctrl</b>+<b>V</b></span> 로 붙여넣기 · 드래그&amp;드롭 · 또는
+        </small>
+        <div class="dz-actions">
+          <button class="btn sm primary" id="btnFile">🖼️ 이미지 파일 선택</button>
+          <input type="file" id="fileInput" accept="image/*" hidden />
+        </div>
+        <small style="display:block;margin-top:8px">붙여넣으면 자동으로 글자를 인식해 메뉴로 만들어 드려요.</small>
+      </div>
+
+      <details class="accurate" id="accuratePanel">
+        <summary>🤖 더 정확하게 인식하기 — Claude로 JSON 만들어 가져오기</summary>
+        <div class="acc-body">
+          <p>메뉴표 글자가 빽빽하면 브라우저 자동 인식이 완벽하지 않을 수 있어요. <b>가장 정확한 방법</b>은 지금 쓰고 계신 <b>Claude Code</b>에 메뉴 스크린샷을 붙여넣고
+          <span class="codechip">이 메뉴를 사이트 JSON으로 만들어줘</span> 라고 한 뒤, 받은 JSON을 아래에 붙여넣고 <b>불러오기</b>를 누르는 거예요.</p>
+          <textarea id="jsonImport" spellcheck="false" placeholder='{"month":"6","dates":[{"date":"6/1","day":"월","mid":[{"name":"...","price":null}],"toddler":[{"name":"...","price":6}]}]}'></textarea>
+          <div class="acc-actions">
+            <button class="btn sm primary" id="btnImport">📥 JSON 불러오기</button>
+            <button class="btn sm" id="btnExport">📤 현재 메뉴 JSON 복사</button>
+          </div>
+        </div>
+      </details>
+
+      <div class="ocr-status" id="ocrStatus">
+        <div class="ocr-row">
+          <div class="spinner"></div>
+          <div style="flex:1">
+            <div class="label" id="ocrLabel">이미지를 인식하는 중…</div>
+            <div class="sub" id="ocrSub">한글 인식 엔진을 준비하고 있어요 (첫 실행은 시간이 조금 걸립니다)</div>
+          </div>
+          <div style="font-weight:800;font-size:13px" id="ocrPct">0%</div>
+        </div>
+        <div class="bar"><i id="ocrBar"></i></div>
+        <img class="preview" id="ocrPreview" alt="" />
+      </div>
+
+      <div class="banner" id="banner">
+        💡 <div><b>처음이신가요?</b> 위에 메뉴 스크린샷을 <b>Ctrl+V</b>로 붙여넣으면 자동 인식돼요. 인식이 어긋나면 <b>✏️ 편집</b>으로 직접 고칠 수 있고, <b>📅 기본 6월 메뉴</b>로 바로 시작할 수도 있어요. 메뉴 이름을 클릭하거나 <b>＋</b> 버튼으로 수량을 올리면 <b>형광펜</b>으로 표시됩니다.</div>
+      </div>
+
+      <div class="grid-head">
+        <h2 id="menuTitle">📅 메뉴</h2>
+        <span class="count" id="menuCount"></span>
+      </div>
+      <div class="menu-grid" id="menuGrid"></div>
+      <div class="add-cell" style="margin-top:14px">
+        <button class="btn sm" id="btnAddCell">＋ 날짜 칸 추가</button>
+      </div>
+      <div id="footerNotes"></div>
+    </main>
+
+    <!-- ============ ORDER PANEL ============ -->
+    <aside class="order" id="orderAside">
+      <div class="order-card">
+        <h3>🧾 주문서 <span class="pill" id="orderPill">0개</span></h3>
+        <div id="orderBody">
+          <div class="order-empty" id="orderEmpty">
+            <span class="e">🍼</span>
+            메뉴 이름을 클릭하거나<br/>＋ 버튼으로 수량을 올려보세요.
+          </div>
+          <textarea id="orderText" spellcheck="false" style="display:none"></textarea>
+        </div>
+        <div class="totals" id="orderTotals" style="display:none">
+          <span>선택 항목 <b id="tItems">0</b>종 · 수량 <b id="tQty">0</b></span>
+          <span>유아식 합계 <b id="tPrice">0</b>원</span>
+        </div>
+        <div class="order-foot">
+          <button class="btn primary" id="btnCopy">📋 복사</button>
+          <button class="btn" id="btnDownload">💾 저장</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<button class="fab" id="fab">🧾 주문서 <span class="pill" id="fabCount">0</span></button>
+<div class="toast" id="toast"></div>
+
+<footer class="foot">
+  BÉBÉPAPA 주문 도우미 · 모든 데이터는 이 브라우저에만 저장됩니다 (서버 전송 없음)
+</footer>
+
+<script>
+/* =========================================================================
+   MENU DATA  ─ 베베파파 6월 (이미지 2장 독립 판독 + 교차검증 결과)
+   ========================================================================= */
+const MENU_VERSION = 3;   // 데이터 갱신 시 +1 → 첫 로드 때 자동 반영
+const MENU_DATA = {
+  "month":"6",
+  "dates":[
+    {"date":"6/1","day":"월","note":null,
+      "mid":[{"name":"한우 배추 우엉 비름나물","price":null},{"name":"닭가슴살 고구마 미니로메인 대추","price":null},{"name":"한우 무 알배기 병아리콩","price":null}],
+      "toddler":[{"name":"한우 (제철)양배추버섯불고기","price":6},{"name":"브로콜리 어묵크래미볶음","price":5.5},{"name":"오징어 두부뭇국","price":5.5}]},
+    {"date":"6/3","day":"수","note":"제9회 전국동시지방선거일\n미래를 위한 소중한 한표 행사하시길 바라며\n즐거운 연휴 보내세요♥\n\n정기고객님들께 이유식 공백 없도록\n미리 연락하여 수량 취합합니다:)","mid":[],"toddler":[]},
+    {"date":"6/5","day":"금","note":null,
+      "mid":[{"name":"한우 당근 케일 렌틸콩","price":null},{"name":"닭가슴살 적채 비타민 차조","price":null},{"name":"한우 단호박 양파 기장","price":null}],
+      "toddler":[{"name":"한돈 두부들기름구이","price":6},{"name":"한우 애호박버섯볶음","price":5.5},{"name":"순살 아귀탕","price":5.5}]},
+    {"date":"6/8","day":"월","note":null,
+      "mid":[{"name":"한우 주키니 시금치 참깨","price":null},{"name":"닭가슴살 감자 애호박 ★노른자","price":null},{"name":"한우 가지 오이 흑미","price":null}],
+      "toddler":[{"name":"아기 안동찜닭","price":6},{"name":"한우 시금치들깨나물","price":5.5},{"name":"해물 순두부찌개","price":5.5}]},
+    {"date":"6/10","day":"수","note":null,
+      "mid":[{"name":"한우 양배추 아기치즈 카이피라","price":null},{"name":"닭가슴살 배 브로콜리 취나물","price":null},{"name":"닭고기 무 청도미나리 김","price":null}],
+      "toddler":[{"name":"한돈듬뿍 오색잡채","price":6},{"name":"콜리플라워 소세지야채볶음","price":5.5},{"name":"한우 들깨미역국","price":5.5}]},
+    {"date":"6/12","day":"금","note":null,
+      "mid":[{"name":"한우 햇호박 콜리플라워 라디치오","price":null},{"name":"닭가슴살 콜라비 새송이 참나물","price":null},{"name":"새우살 비트 아욱 블랙렌즈콩","price":null}],
+      "toddler":[{"name":"생오리구이 야채볶음","price":6},{"name":"(제철)지리멸치 깨순나물볶음","price":5.5},{"name":"두부 흰살생선어묵탕","price":5.5}]},
+    {"date":"6/15","day":"월","note":null,
+      "mid":[{"name":"한우 감자 마 양송이","price":null},{"name":"닭가슴살 양배추 비타민 수수","price":null},{"name":"한우 사과 샐러리 강낭콩","price":null}],
+      "toddler":[{"name":"한돈 모둠야채(제철)참외불고기","price":6},{"name":"한우 (제철)마늘쫑어묵조림","price":5.5},{"name":"콩나물 미나리황태국","price":5.5}]},
+    {"date":"6/17","day":"수","note":null,
+      "mid":[{"name":"한우 배 콜리플라워 콩나물","price":null},{"name":"닭가슴살 당근 적양파 밤","price":null},{"name":"가자미살 애호박 표고 완두콩","price":null}],
+      "toddler":[{"name":"한우 (제철)감자카레볶음","price":6},{"name":"(제철)비름나물 된장무침","price":5.5},{"name":"(제철)아욱 꽃게탕","price":5.5}]},
+    {"date":"6/19","day":"금","note":null,
+      "mid":[{"name":"한우 적채 아보카도 바나나","price":null},{"name":"닭가슴살 배추 팽이 녹두","price":null},{"name":"한우 연근 양상추 흑임자","price":null}],
+      "toddler":[{"name":"한우 배추버섯들깨죽","price":6},{"name":"★오징어 메추리알장조림","price":6},{"name":"한우 대파맑은탕국","price":5.5}]},
+    {"date":"6/22","day":"월","note":null,
+      "mid":[{"name":"한우 콜라비 만가닥 버터헤드","price":null},{"name":"닭가슴살 애호박 느타리 두부","price":null},{"name":"한우 당근 단호박 파프리카","price":null}],
+      "toddler":[{"name":"동파육 야채무조림","price":6},{"name":"콩나물·무나물 무침","price":5.5},{"name":"한우 모둠떡만두국","price":6}]},
+    {"date":"6/24","day":"수","note":null,
+      "mid":[{"name":"한우 양배추 양파 아욱","price":null},{"name":"닭가슴살 가지 깨순 옥수수","price":null},{"name":"대구살 콜리플라워 사과 퀴노아","price":null}],
+      "toddler":[{"name":"아기 간장닭갈비","price":6},{"name":"한우 비빔나물","price":5.5},{"name":"고등어 (제철)시래기된장국","price":5.5}]},
+    {"date":"6/26","day":"금","note":null,
+      "mid":[{"name":"한우 감자 브라운양송이 바질","price":null},{"name":"닭가슴살 주키니 부추 햄프씨드","price":null},{"name":"한우 단지무 미역 들깨","price":null}],
+      "toddler":[{"name":"베이컨 (제철)완두해물볶음밥","price":6},{"name":"한우 양송이짜장","price":5.5},{"name":"★맑은 (제철)감자계란탕","price":5.5}]},
+    {"date":"6/29","day":"월","note":"베베파파 휴무일\n\n정기고객님들께 이유식 공백 없도록\n미리 연락하여 수량 취합합니다:)","mid":[],"toddler":[]}
+  ],
+  "footer":[
+    "* 읽어주세요 *   ☎ 010-4796-4488",
+    "1. 일·화·목 19:00 주문 마감",
+    "2. 초중기부터 야채·과일로 우려낸 육수를 사용",
+    "3. 식재료 상황에 따라 메뉴가 변경될 수 있으며, 메뉴명에 적히지 않은 야채가 추가되어 들어갈 수 있습니다.",
+    "4. 음식 알레르기는 사전에 알려주세요.",
+    "5. 정기 배송 중 이유식 단계 변경 필요시 미리 샘플요청 가능합니다."
+  ]
+};
+
+/* 형광펜 토글 예시 = 사용자가 준 「토글필요.png」의 선택/수량을 그대로 재현 (날짜·구역·인덱스로 정확 매핑) */
+const DEMO_SELECTIONS = [
+  {date:"6/5", sec:"mid",     idx:0, qty:2}, {date:"6/5", sec:"mid", idx:1, qty:2}, {date:"6/5", sec:"mid", idx:2, qty:2},
+  {date:"6/5", sec:"toddler", idx:1, qty:1},
+  {date:"6/8", sec:"mid",     idx:0, qty:2}, {date:"6/8", sec:"mid", idx:2, qty:2}, {date:"6/8", sec:"toddler", idx:0, qty:1},
+  {date:"6/10", sec:"mid",    idx:1, qty:2}, {date:"6/10", sec:"mid", idx:2, qty:2}, {date:"6/10", sec:"toddler", idx:1, qty:1.5},
+  {date:"6/12", sec:"mid",    idx:2, qty:2}, {date:"6/12", sec:"toddler", idx:0, qty:1}, {date:"6/12", sec:"toddler", idx:1, qty:1.5},
+  {date:"6/17", sec:"mid",    idx:2, qty:1}, {date:"6/17", sec:"toddler", idx:0, qty:1}, {date:"6/17", sec:"toddler", idx:1, qty:1},
+  {date:"6/19", sec:"mid",    idx:0, qty:2}, {date:"6/19", sec:"mid", idx:1, qty:1}, {date:"6/19", sec:"toddler", idx:1, qty:1},
+  {date:"6/22", sec:"mid",    idx:0, qty:2}, {date:"6/22", sec:"toddler", idx:2, qty:1},
+  {date:"6/24", sec:"mid",    idx:1, qty:2}, {date:"6/24", sec:"toddler", idx:0, qty:1},
+  {date:"6/26", sec:"mid",    idx:0, qty:3}, {date:"6/26", sec:"mid", idx:1, qty:3}, {date:"6/26", sec:"mid", idx:2, qty:3},
+  {date:"6/26", sec:"toddler",idx:0, qty:2}, {date:"6/26", sec:"toddler", idx:1, qty:1}, {date:"6/26", sec:"toddler", idx:2, qty:1}
+];
+/* ===================================================================== */
+
+/* ---------- state ---------- */
+let menu = null;            // working copy
+let qty = {};              // key -> quantity
+const LS_MENU = 'bebepapa.menu.v1';
+const LS_QTY  = 'bebepapa.qty.v1';
+const LS_VER  = 'bebepapa.ver';
+const key = (di,sec,ii)=>di+':'+sec+':'+ii;
+
+const $ = s=>document.querySelector(s);
+const grid = $('#menuGrid');
+
+/* ---------- load / persist ---------- */
+function loadState(){
+  const storedVer = +(localStorage.getItem(LS_VER)||0);
+  const fresh = (storedVer !== MENU_VERSION) || !localStorage.getItem(LS_MENU);
+  if(fresh){
+    // 내장 메뉴 버전이 바뀌었거나 첫 방문 → 기본 6월 메뉴로 시작 (선택 수량 초기화)
+    menu = deepCopy(MENU_DATA); qty = {};
+  }else{
+    try{ menu = JSON.parse(localStorage.getItem(LS_MENU)); }catch(e){ menu = deepCopy(MENU_DATA); }
+    try{ qty  = JSON.parse(localStorage.getItem(LS_QTY)||'{}'); }catch(e){ qty = {}; }
+  }
+  localStorage.setItem(LS_VER, MENU_VERSION);
+}
+function persist(){
+  localStorage.setItem(LS_MENU, JSON.stringify(menu));
+  localStorage.setItem(LS_QTY, JSON.stringify(qty));
+}
+const deepCopy = o=>JSON.parse(JSON.stringify(o));
+
+/* ---------- render ---------- */
+function render(){
+  grid.innerHTML='';
+  (menu.dates||[]).forEach((d,di)=>{
+    const cell=document.createElement('div');cell.className='cell';
+    const cb = cellSelectedCount(di);
+    cell.innerHTML =
+      '<div class="cell-head"><span>'+esc(d.date)+'</span>'+
+      (d.day?'<span class="day">('+esc(d.day)+')</span>':'')+
+      '<span class="cellbadge'+(cb?' show':'')+'" data-cb="'+di+'">'+cb+'</span></div>';
+    const body=document.createElement('div');body.className='cell-body';
+
+    if(d.note && (!d.mid||!d.mid.length) && (!d.toddler||!d.toddler.length)){
+      const n=document.createElement('div');n.className='note-cell';n.textContent=d.note;
+      body.appendChild(n);
+    }
+    if(d.mid && d.mid.length || isEditing){
+      body.appendChild(sectionLabel('중기 / 완료기'));
+      (d.mid||[]).forEach((it,ii)=>body.appendChild(itemRow(di,'mid',ii,it)));
+      body.appendChild(addLineBtn(di,'mid'));
+    }
+    if(d.toddler && d.toddler.length || isEditing){
+      body.appendChild(sectionLabel('유아식'));
+      (d.toddler||[]).forEach((it,ii)=>body.appendChild(itemRow(di,'toddler',ii,it)));
+      body.appendChild(addLineBtn(di,'toddler'));
+    }
+    cell.appendChild(body);
+    grid.appendChild(cell);
+  });
+  $('#menuTitle').textContent='📅 '+(menu.month?menu.month+'월 ':'')+'메뉴';
+  $('#menuCount').textContent=(menu.dates||[]).length+'일 · 메뉴 '+totalMenuLines()+'종';
+  document.body.classList.toggle('editing',isEditing);
+  renderFooterNotes();
+  updateOrder();
+}
+function renderFooterNotes(){
+  const box=$('#footerNotes');
+  const notes=(menu.footer||[]).filter(Boolean);
+  if(!notes.length){box.innerHTML='';return;}
+  box.innerHTML='<div class="notes-card"><div class="notes-title">📌 주문 안내</div>'+
+    notes.map(n=>'<div class="note-line">'+esc(n)+'</div>').join('')+'</div>';
+}
+function sectionLabel(t){const e=document.createElement('div');e.className='seclabel';e.textContent=t;return e;}
+function itemRow(di,sec,ii,it){
+  const k=key(di,sec,ii);const q=qty[k]||0;
+  const row=document.createElement('div');row.className='item'+(q>0?' on':'');row.dataset.k=k;
+  const name=document.createElement('div');name.className='name';name.textContent=it.name;
+  name.contentEditable=isEditing;
+  name.addEventListener('click',e=>{ if(isEditing) return; bump(di,sec,ii,1); });
+  name.addEventListener('blur',()=>{ if(isEditing){ it.name=name.textContent.trim(); persist(); } });
+  name.addEventListener('keydown',e=>{ if(isEditing&&e.key==='Enter'){e.preventDefault();name.blur();} });
+  row.appendChild(name);
+  if(it.price!=null){const p=document.createElement('span');p.className='price';p.textContent=fmtPrice(it.price);row.appendChild(p);}
+  // stepper
+  const st=document.createElement('div');st.className='stepper';
+  const minus=document.createElement('button');minus.textContent='−';minus.disabled=q<=0;
+  minus.onclick=()=>bump(di,sec,ii,-1);
+  const qn=document.createElement('div');qn.className='qty';qn.textContent=q;
+  const plus=document.createElement('button');plus.textContent='＋';plus.onclick=()=>bump(di,sec,ii,1);
+  st.append(minus,qn,plus);row.appendChild(st);
+  // delete (edit mode)
+  const del=document.createElement('button');del.className='del-item';del.textContent='×';del.title='항목 삭제';
+  del.onclick=()=>{ menu.dates[di][sec].splice(ii,1); reindexAfterDelete(di,sec,ii); persist(); render(); };
+  row.appendChild(del);
+  return row;
+}
+function addLineBtn(di,sec){
+  const b=document.createElement('button');b.className='add-line';b.textContent='＋ 항목 추가';
+  b.onclick=()=>{ menu.dates[di][sec].push({name:'새 메뉴',price:sec==='toddler'?5.5:null}); persist(); render(); };
+  return b;
+}
+
+/* ---------- quantity logic ---------- */
+function bump(di,sec,ii,delta){
+  const k=key(di,sec,ii);
+  let v=(qty[k]||0)+delta;
+  if(v<0)v=0; if(v>20)v=20;
+  if(v===0) delete qty[k]; else qty[k]=v;
+  persist();
+  // surgical DOM update for snappiness
+  const row=grid.querySelector('.item[data-k="'+CSS.escape(k)+'"]');
+  if(row){
+    row.classList.toggle('on',v>0);
+    row.querySelector('.qty').textContent=v;
+    row.querySelector('.stepper button:first-child').disabled=v<=0;
+  }
+  const badge=grid.querySelector('.cellbadge[data-cb="'+di+'"]');
+  if(badge){const c=cellSelectedCount(di);badge.textContent=c;badge.classList.toggle('show',c>0);}
+  updateOrder();
+}
+function cellSelectedCount(di){
+  let c=0;const d=menu.dates[di];
+  ['mid','toddler'].forEach(sec=>(d[sec]||[]).forEach((_,ii)=>{ if(qty[key(di,sec,ii)]>0)c++; }));
+  return c;
+}
+function totalMenuLines(){let n=0;(menu.dates||[]).forEach(d=>{n+=(d.mid||[]).length+(d.toddler||[]).length;});return n;}
+function reindexAfterDelete(di,sec,delIdx){
+  // shift qty keys above delIdx down by one
+  const newQty={};
+  Object.keys(qty).forEach(k=>{
+    const [d,s,i]=k.split(':');
+    if(+d===di && s===sec){
+      const idx=+i; if(idx===delIdx) return; const ni=idx>delIdx?idx-1:idx;
+      newQty[key(di,sec,ni)]=qty[k];
+    } else newQty[k]=qty[k];
+  });
+  qty=newQty;
+}
+
+/* ---------- order text ---------- */
+function buildOrder(){
+  const lines=[];let items=0,totQty=0,totPrice=0;
+  (menu.dates||[]).forEach((d,di)=>{
+    const picks=[];
+    ['mid','toddler'].forEach(sec=>(d[sec]||[]).forEach((it,ii)=>{
+      const q=qty[key(di,sec,ii)]||0;
+      if(q>0){
+        picks.push({name:it.name,q,price:it.price});
+        items++;totQty+=q; if(it.price!=null) totPrice+=it.price*1000*q;
+      }
+    }));
+    if(picks.length){
+      lines.push('📅 '+d.date+(d.day?' ('+d.day+')':''));
+      picks.forEach(p=>lines.push('   · '+p.name+'  ×'+p.q));
+    }
+  });
+  return {text:lines.join('\n'),items,totQty,totPrice};
+}
+function updateOrder(){
+  const o=buildOrder();
+  const has=o.items>0;
+  $('#orderEmpty').style.display=has?'none':'block';
+  const ta=$('#orderText');ta.style.display=has?'block':'none';
+  $('#orderTotals').style.display=has?'flex':'none';
+  if(has){
+    const header='🍼 베베파파 주문서\n────────────────\n';
+    const footer='\n────────────────\n총 '+o.items+'종 / 수량 '+o.totQty+'개';
+    ta.value=header+o.text+footer;
+    autoGrow(ta);
+  }
+  $('#orderPill').textContent=o.items+'개';
+  $('#fabCount').textContent=o.items;
+  $('#tItems').textContent=o.items;
+  $('#tQty').textContent=o.totQty;
+  $('#tPrice').textContent=o.totPrice.toLocaleString('ko-KR');
+}
+function autoGrow(ta){ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,window.innerHeight*0.5)+'px';}
+
+/* ---------- helpers ---------- */
+function esc(s){return (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function fmtPrice(p){ if(p==null)return''; const n=Math.round(p*1000); return n.toLocaleString('ko-KR'); }
+function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),1800);}
+
+/* ---------- toolbar actions ---------- */
+let isEditing=false;
+$('#btnEdit').onclick=function(){ isEditing=!isEditing; this.setAttribute('aria-pressed',isEditing); this.textContent=isEditing?'✓ 편집 완료':'✏️ 편집'; render(); };
+$('#btnReset').onclick=()=>{ if(Object.keys(qty).length && !confirm('선택한 수량을 모두 초기화할까요?'))return; qty={};persist();render();toast('수량을 초기화했어요'); };
+$('#btnDefault').onclick=()=>{ if(confirm('현재 메뉴를 내장된 6월 메뉴로 교체할까요? (선택 수량은 유지)')){ menu=deepCopy(MENU_DATA); persist(); render(); toast('기본 6월 메뉴를 불러왔어요'); } };
+$('#btnDemo').onclick=()=>{
+  if(!DEMO_SELECTIONS.length){toast('예시 데이터가 없어요');return;}
+  // 예시는 기본 6월 메뉴 기준 → 다른 메뉴면 기본으로 먼저 맞춰줌
+  if(JSON.stringify(menu.dates.map(d=>d.date))!==JSON.stringify(MENU_DATA.dates.map(d=>d.date))){
+    if(!confirm('예시(형광펜 데모)는 기본 6월 메뉴 기준이에요. 기본 메뉴로 바꾸고 예시를 적용할까요?'))return;
+    menu=deepCopy(MENU_DATA);
+  }
+  qty={};
+  DEMO_SELECTIONS.forEach(s=>{
+    const di=menu.dates.findIndex(d=>d.date===s.date);
+    if(di<0)return;
+    const arr=menu.dates[di][s.sec]||[];
+    if(s.idx<arr.length) qty[key(di,s.sec,s.idx)]=s.qty;
+  });
+  persist();render();
+  $('#orderAside').classList.add('open');
+  toast('형광펜 예시를 적용했어요 ✨ — 「토글필요.png」와 동일');
+};
+
+$('#btnAddCell').onclick=()=>{
+  menu.dates=menu.dates||[];
+  menu.dates.push({date:'6/00',day:'',note:null,mid:[{name:'새 메뉴',price:null}],toddler:[{name:'새 메뉴',price:5.5}]});
+  persist();render();
+  grid.lastElementChild.scrollIntoView({behavior:'smooth',block:'center'});
+};
+
+/* ---------- copy / download ---------- */
+$('#btnCopy').onclick=async()=>{
+  const t=$('#orderText').value;
+  if(!t){toast('먼저 메뉴를 선택해주세요');return;}
+  try{await navigator.clipboard.writeText(t);toast('주문서를 복사했어요 📋');}
+  catch(e){$('#orderText').select();document.execCommand('copy');toast('주문서를 복사했어요 📋');}
+};
+$('#btnDownload').onclick=()=>{
+  const t=$('#orderText').value; if(!t){toast('먼저 메뉴를 선택해주세요');return;}
+  const blob=new Blob([t],{type:'text/plain;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='베베파파_주문서.txt';a.click();URL.revokeObjectURL(a.href);toast('주문서를 저장했어요 💾');
+};
+
+/* ---------- mobile FAB ---------- */
+$('#fab').onclick=()=>$('#orderAside').classList.toggle('open');
+
+/* ---------- JSON import / export (정확 인식 경로) ---------- */
+function normalizeMenu(obj){
+  let src = Array.isArray(obj) ? {dates:obj} : obj;
+  if(src && Array.isArray(src.menu)) src={dates:src.menu};
+  if(src && src.menu && src.menu.dates) src=src.menu;        // 워크플로우 {menu:{...}} 형태 허용
+  if(!src || !Array.isArray(src.dates)) throw new Error('dates 배열이 없어요');
+  const dates=src.dates.map(d=>({
+    date:String(d.date||'').trim()||'?',
+    day:String(d.day||'').trim(),
+    note:d.note!=null?String(d.note):null,
+    mid:(d.mid||[]).map(coerceItem).filter(Boolean),
+    toddler:(d.toddler||[]).map(coerceItem).filter(Boolean)
+  }));
+  return {month:String(src.month||'').replace('월','')||'', dates, footer:Array.isArray(src.footer)?src.footer:[]};
+}
+function coerceItem(it){
+  if(it==null)return null;
+  if(typeof it==='string'){const t=it.trim();return t?{name:t,price:null}:null;}
+  const name=String(it.name||'').trim(); if(!name)return null;
+  let price=it.price; if(price==='')price=null; if(price!=null)price=parseFloat(price); if(isNaN(price))price=null;
+  return {name,price};
+}
+$('#btnImport').onclick=()=>{
+  const raw=$('#jsonImport').value.trim();
+  if(!raw){toast('JSON을 먼저 붙여넣어 주세요');return;}
+  let obj; try{ obj=JSON.parse(raw); }catch(e){ toast('JSON 형식이 올바르지 않아요: '+e.message); return; }
+  let nm; try{ nm=normalizeMenu(obj); }catch(e){ toast('메뉴 형식 오류: '+e.message); return; }
+  if(!nm.dates.length){toast('날짜가 하나도 없어요');return;}
+  menu=nm; qty={}; persist(); render();
+  $('#accuratePanel').open=false; $('#jsonImport').value='';
+  toast('메뉴를 불러왔어요! '+nm.dates.length+'개 날짜 · 메뉴 '+totalMenuLines()+'종');
+};
+$('#btnExport').onclick=async()=>{
+  const json=JSON.stringify({month:menu.month,dates:menu.dates,footer:menu.footer},null,2);
+  try{await navigator.clipboard.writeText(json);}catch(e){$('#jsonImport').value=json;}
+  toast('현재 메뉴 JSON을 복사했어요 📤');
+};
+
+/* =========================================================================
+   IMAGE PASTE / DROP / FILE  →  OCR  →  PARSE
+   ========================================================================= */
+const dz=$('#dropzone');
+$('#btnFile').onclick=e=>{e.stopPropagation();$('#fileInput').click();};
+dz.onclick=()=>$('#fileInput').click();
+$('#fileInput').onchange=e=>{ if(e.target.files[0]) handleImage(e.target.files[0]); };
+
+window.addEventListener('paste',e=>{
+  const items=(e.clipboardData||window.clipboardData).items;
+  for(const it of items){
+    if(it.type.indexOf('image')===0){ const f=it.getAsFile(); if(f){ e.preventDefault(); handleImage(f);} return; }
+  }
+});
+['dragenter','dragover'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add('drag');}));
+['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove('drag');}));
+dz.addEventListener('drop',e=>{const f=e.dataTransfer.files[0];if(f&&f.type.indexOf('image')===0)handleImage(f);});
+
+function setOcr(show,label,sub,pct){
+  $('#ocrStatus').classList.toggle('show',show);
+  if(label!=null)$('#ocrLabel').textContent=label;
+  if(sub!=null)$('#ocrSub').textContent=sub;
+  if(pct!=null){$('#ocrPct').textContent=Math.round(pct)+'%';$('#ocrBar').style.width=pct+'%';}
+}
+
+async function handleImage(file){
+  const url=URL.createObjectURL(file);
+  const pv=$('#ocrPreview');pv.src=url;pv.style.display='block';
+  setOcr(true,'이미지를 인식하는 중…','한글 인식 엔진을 준비하고 있어요 (첫 실행은 다운로드로 시간이 걸려요)',2);
+  $('#orderAside').classList.remove('open');
+  try{
+    const {data}=await Tesseract.recognize(url,'kor+eng',{
+      logger:m=>{
+        if(m.status==='recognizing text') setOcr(true,'글자를 읽는 중…','메뉴 항목을 추출하고 있어요',5+m.progress*90);
+        else if(m.status&&m.status.indexOf('load')>=0) setOcr(true,'인식 엔진 준비 중…',m.status,3);
+      }
+    });
+    setOcr(true,'메뉴로 정리하는 중…','',98);
+    const parsed=parseMenu(data);
+    if(parsed.dates.length){
+      menu=parsed; qty={}; persist(); render();
+      isEditing=true;$('#btnEdit').setAttribute('aria-pressed','true');$('#btnEdit').textContent='✓ 편집 완료';
+      document.body.classList.add('editing');render();
+      toast('인식 완료! '+parsed.dates.length+'개 날짜를 찾았어요. 편집 모드에서 확인·수정하세요');
+    }else{
+      toast('표 구조를 찾지 못했어요. 텍스트를 편집 모드로 넣어드릴게요');
+      menu=fallbackFromText(data.text);qty={};persist();render();
+      isEditing=true;document.body.classList.add('editing');render();
+    }
+  }catch(err){
+    console.error(err);
+    setOcr(true,'인식에 실패했어요 😢','네트워크 연결을 확인하거나, 기본 6월 메뉴로 시작해 보세요',100);
+    toast('인식 실패 — 기본 메뉴/편집을 이용해 주세요');
+    return;
+  }
+  setTimeout(()=>setOcr(false),900);
+}
+
+/* ----- parser: reconstruct the 3-column date-grid from OCR text -----
+   Tesseract reads each table row as ONE wide line spanning all 3 columns,
+   padding the gaps between cells with long runs of spaces. We split each
+   line on those big gaps, assign each fragment to a column by its position,
+   then read column-by-column (top→bottom) so each date cell stays intact. */
+const PRICE_RE=/(\d{1,2}[.,]\d)\s*$/;
+const DATEHEAD_RE=/(\d[\d\s\/.,·]{0,4})\s*[\(\[]\s*([월화수목금토일])\s*[\)\]]?/;
+function getRawLines(data){
+  if(data.lines&&data.lines.length) return data.lines.map(l=>(l.text||'').replace(/\n/g,' ').replace(/\s+$/,'')).filter(t=>t.trim());
+  return (data.text||'').split(/\n+/).map(t=>t.replace(/\s+$/,'')).filter(t=>t.trim());
+}
+function splitIntoColumns(rawLines){
+  const cols=[[],[],[]];
+  rawLines.forEach(line=>{
+    const len=Math.max(line.length,1);
+    const re=/\S.*?(?=\s{3,}|$)/g;        // chunks separated by 3+ spaces
+    let m,any=false;
+    while((m=re.exec(line))){
+      const txt=m[0].trim(); if(!txt)continue; any=true;
+      const ratio=m.index/len;
+      const c=ratio<0.34?0:(ratio<0.67?1:2);
+      cols[c].push(txt);
+    }
+    if(!any && line.trim()) cols[0].push(line.trim());
+  });
+  // read column 0 fully, then 1, then 2 — matches the brand's left→right cell order
+  return [...cols[0],' COL',...cols[1],' COL',...cols[2]];
+}
+function fmtDate(digits){
+  const d=digits.replace(/[^\d]/g,'');
+  if(!d)return digits.trim();
+  if(d.length===1)return '6/'+d;
+  if(d.length===2)return d[0]+'/'+d.slice(1);
+  return d[0]+'/'+d.slice(1);   // best-effort; user can fix in edit mode
+}
+function parseMenu(data){
+  const lines=splitIntoColumns(getRawLines(data));
+  const dates=[];let cur=null,sec='mid';let month='';
+  for(let raw of lines){
+    if(raw===' COL'){cur=null;sec='mid';continue;}
+    let t=raw.replace(/\s{2,}/g,' ').trim();
+    if(!t)continue;
+    const dm=t.match(DATEHEAD_RE);
+    if(dm){
+      cur={date:fmtDate(dm[1]),day:dm[2],note:null,mid:[],toddler:[]};
+      month=month||'6';dates.push(cur);sec='mid';
+      const rest=t.slice(dm.index+dm[0].length).replace(/^[\)\]\s]+/,'').trim();
+      if(rest&&!/중기|완료|유아/.test(rest)) maybeItem(cur,sec,rest);
+      continue;
+    }
+    if(!cur)continue;
+    if(/중기|완료/.test(t)){sec='mid';continue;}
+    if(/유아/.test(t)){sec='toddler';continue;}
+    maybeItem(cur,sec,t);
+  }
+  return {month:month||MENU_DATA.month,dates:dates.filter(d=>d.mid.length||d.toddler.length||d.note),footer:[]};
+}
+function maybeItem(cur,sec,t){
+  t=t.replace(/^[•·▪\-\*\s]+/,'').replace(/[|ㅣ]/g,' ').replace(/\s{2,}/g,' ').trim();
+  if(t.length<2)return;
+  if(/읽어주세요|주문\s*마감|전화|☎|연락|취합|알레르기|샘플요청|단계\s*변경|육수|식재료|선거|행사|연휴|보내세요|휴무/.test(t))return; // notice/footer noise
+  let price=null;const pm=t.match(PRICE_RE);
+  if(pm){price=parseFloat(pm[1].replace(',','.'));t=t.slice(0,pm.index).trim();}
+  if(price!=null)sec='toddler';
+  if(t.length>=2)cur[sec].push({name:t,price});
+}
+function fallbackFromText(text){
+  const items=(text||'').split(/\n+/).map(s=>s.trim()).filter(s=>s.length>=2).slice(0,60);
+  return {month:'',dates:[{date:'인식결과',day:'',note:null,
+    mid:items.map(n=>({name:n,price:null})),toddler:[]}]};
+}
+
+/* ---------- init ---------- */
+loadState();render();
+window.addEventListener('resize',()=>{const ta=$('#orderText');if(ta.style.display!=='none')autoGrow(ta);});
+</script>
+</body>
+</html>

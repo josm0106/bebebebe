@@ -1,0 +1,12 @@
+# 메뉴 전사 작업 중 생성된 디버그용 크롭 이미지들 (저장소에 불필요)
+*.png
+!토글필요.png
+
+# 빈 임시 파일
+주문서 .txt
+
+# 에디터/OS
+.DS_Store
+Thumbs.db
+*.log
+node_modules/
