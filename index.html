@@ -315,18 +315,23 @@
       <details class="accurate" id="accuratePanel">
         <summary>🤖 AI 정확 인식 설정 — 사진을 정확히 읽으려면 (권장 · 무료)</summary>
         <div class="acc-body">
-          <p><b>무료 AI 키</b>를 한 번만 등록하면, 사진을 붙여넣을 때 <b>AI가 메뉴를 정확히</b> 읽어줍니다.
-          (브라우저 기본 인식은 빽빽한 표에서 날짜·글자가 깨질 수 있어요.)</p>
-          <ol class="acc-steps">
-            <li><a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">aistudio.google.com/apikey</a> 접속 → 구글 로그인 → <b>Create API key</b> → 키 복사</li>
-            <li>아래 칸에 붙여넣고 <b>저장</b> (키는 이 브라우저에만 저장돼요)</li>
-          </ol>
-          <div class="acc-actions">
-            <input type="password" id="aiKey" placeholder="Gemini API 키 (AIza...)" autocomplete="off" spellcheck="false" style="flex:1;min-width:180px" />
-            <button class="btn sm primary" id="btnSaveKey">저장</button>
-            <button class="btn sm" id="btnClearKey">삭제</button>
+          <p id="aiIntro"><b>무료 AI 키</b>를 한 번만 등록하면, 사진을 붙여넣을 때 <b>AI가 메뉴를 정확히</b> 읽어줍니다.
+          키는 <b>이 브라우저에만 저장</b>되고(공개 소스엔 안 들어감), 한 번 등록하면 이 칸은 사라집니다.</p>
+          <div id="aiSetup">
+            <ol class="acc-steps">
+              <li><a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">aistudio.google.com/apikey</a> 접속 → 구글 로그인 → <b>Create API key</b> → 키 복사</li>
+              <li>아래 칸에 붙여넣고 <b>저장</b></li>
+            </ol>
+            <div class="acc-actions">
+              <input type="password" id="aiKey" placeholder="API 키 붙여넣기" autocomplete="off" spellcheck="false" style="flex:1;min-width:180px" />
+              <button class="btn sm primary" id="btnSaveKey">저장</button>
+            </div>
           </div>
           <div id="aiStatus" class="ai-status"></div>
+          <div class="acc-actions" id="aiManage" style="display:none">
+            <button class="btn sm" id="btnChangeKey">🔑 키 변경</button>
+            <button class="btn sm danger" id="btnClearKey">삭제</button>
+          </div>
           <hr class="acc-hr" />
           <p>키 없이 <b>100% 정확</b>히 하려면: 쓰고 계신 <b>Claude Code</b>에 메뉴 사진을 붙여넣고
           <span class="codechip">이 메뉴를 사이트 JSON으로 만들어줘</span> → 받은 JSON을 아래에 붙여넣고 불러오기.</p>
@@ -770,16 +775,24 @@ $('#btnExport').onclick=async()=>{
 function getAiKey(){ return localStorage.getItem(LS_AIKEY)||''; }
 function refreshAiStatus(){
   const k=getAiKey(); const el=$('#aiStatus'); if(!el)return;
-  if(k){ el.textContent='✅ AI 정확 인식 켜짐 — 이제 사진을 붙여넣으면 AI가 정확히 읽어요'; el.className='ai-status on'; if($('#aiKey'))$('#aiKey').value=''; }
-  else { el.textContent='⚪ AI 키 미등록 — 등록 전에는 브라우저 기본 인식(정확도 낮음)을 사용해요'; el.className='ai-status off'; }
+  const setup=$('#aiSetup'), manage=$('#aiManage'), intro=$('#aiIntro');
+  if(k){
+    el.textContent='✅ AI 정확 인식 켜짐 — 사진을 붙여넣으면 AI가 정확히 읽어요'; el.className='ai-status on';
+    if(setup)setup.style.display='none'; if(manage)manage.style.display='flex'; if(intro)intro.style.display='none';
+    if($('#aiKey'))$('#aiKey').value='';
+  }else{
+    el.textContent='⚪ AI 키 미등록 — 등록 전에는 브라우저 기본 인식(정확도 낮음)을 사용해요'; el.className='ai-status off';
+    if(setup)setup.style.display='block'; if(manage)manage.style.display='none'; if(intro)intro.style.display='block';
+  }
   const hint=$('#aiHint'); if(hint) hint.style.display=k?'inline':'none';
 }
 $('#btnSaveKey').onclick=()=>{
   const v=($('#aiKey').value||'').trim();
   if(!v){toast('키를 먼저 붙여넣어 주세요');return;}
-  if(!/^AIza[\w-]{20,}$/.test(v) && !confirm('키 형식이 일반적인 Gemini 키(AIza...)와 달라요. 그래도 저장할까요?'))return;
+  if(v.length<20){toast('키가 너무 짧아요 — 올바른 키인지 확인해 주세요');return;}
   localStorage.setItem(LS_AIKEY,v); refreshAiStatus(); toast('AI 키를 저장했어요 — 이제 사진을 붙여넣어 보세요 ✅');
 };
+$('#btnChangeKey').onclick=()=>{ const s=$('#aiSetup'); if(s){s.style.display='block';} const k=$('#aiKey'); if(k)k.focus(); };
 $('#btnClearKey').onclick=()=>{ localStorage.removeItem(LS_AIKEY); refreshAiStatus(); toast('AI 키를 삭제했어요'); };
 
 function fileToBase64(file){
